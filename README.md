@@ -8,6 +8,6 @@ This project aims to develop a reliable pipe failure prediction model that ident
 
 The RMarkdown files attached here form some of the data-driven approaches taken: 
 
-  1. PipeFailureRate: calcualtes the Poisson mean and 95 % confidence intervals for pipe failure rates. 
-  2. GeneralizedAdditiveModel: presents a generalized additive model with Poisson distribution for calculating monthly failure rates.
-  3. GradientBoostingDecisionTreeModel: presents a gradient boosting classification tree model. 
+  1. Appendix A: PipeFailureRate: calcualtes the Poisson mean and 95 % confidence intervals for pipe failure rates. 
+  2. Appendix C: GeneralizedAdditiveModel: presents a generalized additive model with Poisson distribution for calculating monthly failure rates.
+  3. Appendix D: GradientBoostingDecisionTreeModel: presents a gradient boosting classification tree model. 
