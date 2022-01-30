@@ -1,0 +1,224 @@
+---
+
+Author: Neal Barton
+Version: 1
+Date: 14/04/2020
+Output: word_document
+Title: Generalised Additive Model Script
+output:
+  word_document: default
+
+---
+
+## Install relevant packages
+
+Load relevant packages from the R library. In this study we used mgcv for the gam models and mgcViz for the visualisations. extrafont, ggthemes, ggplot were used for the aesthetics of the plots, whilst gridExtra was used to set the grid matrix for the final layout.  
+
+```{r install relevant packages, eval=FALSE, include=TRUE}
+
+# For Generalised Additive Model
+library(mgcv)
+
+# For the plots
+library(mgcViz)
+library(extrafont)
+library(extrafontdb)
+library(ggthemes)
+library(ggplot2)
+library(gridExtra)
+
+# Extend memory due to large data sets 
+memory.limit(60000000)
+
+```
+
+## Generalized Additive Model 
+
+In the ‘mgcv’ package we used ‘bam’ for large data sets, penalized cubic regression splines (bs = ‘cs’) and use select = TRUE which removes variables with coefficients at 0. The knots (‘k =’) is left as default, family used ‘poisson()’, the method is restricted maximum likelihood ‘REML’ and we use an offset of length to account for different pipe lengths.
+
+```{r generalized additive model, eval=FALSE, include=TRUE}
+
+model <- bam(nBurstsReactive ~ offset(log(length)) + Diameter_Band + Age_Band + s(Temp, bs = "cs") + s(TchgW1, bs = "cs") + s(TchgW2, bs = "cs") + 
+             s(DaysAirFrost, bs = "cs") + s(SMD, bs = "cs") + s(SMDchgW1, bs = "cs") + s(SMDchgW2, bs = "cs") + s(pH, bs = "cs") +
+             Shrink_Swell + Subsoil + HOST, select = TRUE, family = poisson(), data = df, method = "REML")
+
+# Check the model summary
+summary(model) 
+
+# Check model diagnostics - to see if the residuals are significant or not
+gam.check(model)
+
+# Check for pairwise concurvity
+concurvity(model, full = FALSE)
+
+```
+
+## Plot Visualisaiton
+
+We use mgcViz to extract the partial plots and then extract each covariate individually to create the desired matrix of plots. Adapted here from:
+
+Fasiolo, M., Nedellec, R., Goude, Y., Wood, S.N., 2019. Scalable Visualization Methods for Modern Generalized Additive Models. J. Comput. Graph. Stat. 1–9. https://doi.org/10.1080/10618600.2019.1629942 
+
+```{r plot visualisaiton, eval=FALSE, include=TRUE}
+
+# Set themes for each plot
+themeSize <- theme(text = element_text(family = "serif"), 
+                   axis.text = element_text(size = 11),
+                   axis.title = element_text(size = 11), 
+                   legend.title = element_text(size = 11), 
+                   legend.text = element_text(size = 11))
+
+# Create a figure list with all plots 
+figure_1 <- list()
+
+#  use c - for categorical terms and s for smoothed terms
+figure_1[[1]] <- plot(pterm(gam_plot, 1), n = 200) + 
+  l_fitPoints(size = 1, col = "red") +
+  l_ciBar(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("Diameter Band (mm)"), y = expression(c * "(" * "<df>" * ")")) + 
+  scale_x_discrete(labels = c("1" = "<166", "2" = "166-<321", "3" = "321-<625", "4" = ">625")) +
+  theme(axis.text.x = element_text(angle = 15, hjust = 1)) +
+  ggtitle(~italic("<p-value>")) +
+  theme_classic() +
+  themeSize
+
+figure_1[[2]] <- plot(pterm(gam_plot, 2), n = 200) + 
+  l_fitPoints(size = 1, col = "red") +
+  l_ciBar(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  theme_classic() +
+  labs(x = expression("Age Band"), y = expression(c * "(" * "<df>" * ")")) + 
+  scale_x_discrete(labels = c("1" = "<1881",
+                              "2" = "1881-<1900",
+                              "3" = "1900-<1920", 
+                              "4" = "1920-<1940", 
+                              "5" = "1940-<1960", 
+                              "6" = "1960-<1980",
+                              "7" = "1980-<2000",
+                              "8" = "2000-<2021")) + 
+  theme(axis.text.x = element_text(angle = 15, hjust = 1)) +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[3]] <- plot(sm(gam_plot, 1), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("Temperature ("*~degree*C*")"), y = expression(s * "(" * "<df>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[4]] <- plot(sm(gam_plot, 2), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("Temp Change Over 1 Week ("*~degree*C*")"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[5]] <- plot(sm(gam_plot, 3), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("Temp Change Over 2 Weeks ("*~degree*C*")"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[6]] <- plot(sm(gam_plot, 4), n = 200) +
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("Days Air Frost in a Month"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[7]] <- plot(sm(gam_plot, 5), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("SMD (mm)"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[8]] <- plot(sm(gam_plot, 6), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("SMD Change Over 1 Week (mm)"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[9]] <- plot(sm(gam_plot, 7), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("SMD Change Over 2 Weeks (mm)"), y = expression(s * "(" * "<edf>" * ")")) +
+  ggtitle(~italic("<p-value>")) +
+  theme_classic() +
+  themeSize
+
+figure_1[[10]] <- plot(pterm(gam_plot, 4), n = 200) + 
+  l_fitPoints(size = 1, col = "red") +
+  l_ciBar(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  theme_classic() +
+  labs(x = expression("Subsoil Texture (70 cm Depth)"), y = expression(c * "(" * "<df>" * ")")) +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[11]] <- plot(pterm(gam_plot, 3), n = 200) + 
+  l_fitPoints(size = 1, col = "red") +
+  l_ciBar(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  theme_classic() +
+  labs(x = expression("Shrink Swell (% Vol)"), y = expression(c * "(" * "<df>" * ")")) + 
+  scale_x_discrete(labels = c("1" = "<3",
+                              "2" = "3-5",
+                              "3" = "5-12",
+                              "4" = "12-15",
+                              "6" = "12-15*")) +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[12]] <- plot(sm(gam_plot, 8), n = 200) + 
+  l_fitLine(linetype = 1, colour = "red") +
+  l_ciLine(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  labs(x = expression("pH"), y = expression(s * "(" * "<edf>" * ")")) +
+  theme_classic() +
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+figure_1[[13]] <- plot(pterm(gam_plot, 5), n = 200) + 
+  l_fitPoints(size = 1, col = "red") +
+  l_ciBar(linetype = 3, colour = "blue", level = 0.99) +
+  l_rug() +
+  theme_classic() +
+  labs(x = expression("HOST"), y = expression(c * "(" * "<df>" * ")")) + 
+  ggtitle(~italic("<p-value>")) +
+  themeSize
+
+
+# To extract the smoothed variable - Temp - Works fine
+fig_layout <- matrix(c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15), 
+                     nrow = 5, 
+                     ncol = 3, 
+                     byrow = T)
+
+
+png("<data_location>", units = "mm", res = 1000, height = 280, width = 210)
+
+grid.arrange(grobs = lapply(figure_1, "[[", "ggObj"), layout_matrix = fig_layout)
+
+dev.off()
+
+```
+
+

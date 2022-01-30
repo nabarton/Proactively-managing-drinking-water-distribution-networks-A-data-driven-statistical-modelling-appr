@@ -1,0 +1,204 @@
+---
+
+Author: Neal Barton
+Version: 1
+Date: 24/06/2021
+Output: word_document
+Title: Gradient Boosting Decision Tree Model
+output:
+  word_document: default
+
+---
+
+## Load packages
+
+The gradient boosing model packages. 
+
+```{r load packages, eval=FALSE, include=TRUE}
+
+# Load packages
+
+library(caret) # for developing the model
+library(pROC) # for AUC calculations
+library(dplyr) # model processing
+library(purrr) # for functional programming (map)
+library(ModelMetrics) # For looking at model metrics
+library(ggplot2) # for the plots
+library(ggthemes) # to improve the plots
+
+# Increase memory
+
+memory.limit(30000000)
+
+```
+
+## Run Model
+
+This is the final model based on the tuned hyperparameters. 
+
+```{r run model, eval=FALSE, include=TRUE}
+
+# Load dataset
+df <- readRDS(("DATA LOCATION"))
+
+# Stratify the sampling based on a split of the class and different representative materials 
+set.seed(5627)  # set the random seed for reproducibility
+strat <- stratified(df, c('mat', 'class'), 0.7, bothSets = T)
+
+# Collect training and testing data sets from the stratified sampling function
+train <- as.data.frame(strat$SAMP1)
+test <- as.data.frame(strat$SAMP2)
+
+# mutate all characters into factors for model to work
+train <- train %>% mutate_if(is.character, as.factor)
+test <- test %>% mutate_if(is.character, as.factor)
+
+
+# Set up control function for training, use 5 fold cross validation
+ctrl <- trainControl(method = "cv",
+                     number = 5, 
+                     returnResamp = 'none',
+                     summaryFunction = twoClassSummary,
+                     classProbs = T,
+                     savePredictions = T,
+                     verboseIter = F)
+
+
+# Set up trainng grid - add parameters of optimal trained model
+gbmGrid <-  expand.grid(interaction.depth = 15,             
+                        n.trees = 1649,                                   
+                        shrinkage = 0.01,                                     
+                        n.minobsinnode = 2)                  
+
+# set the random seed for reproducibility and run model
+set.seed(5627)  
+model <- train(class ~ .,
+             data = train,
+             method = "gbm",
+             metric = "ROC",
+             tuneGrid = gbmGrid,
+             verbose = FALSE,
+             trControl = ctrl)
+
+
+# Run model on test data
+test$gbm <- predict(model, newdata = test, type = "prob") [, "yes"]
+
+# Check variable importance
+summary(model)
+
+# print model summary
+print(model)
+
+```
+
+## ROC/AUC 
+
+Run the models ROC/AUC metrics, code adapted from: 
+
+Martin, D.P. 2016. Handling Class Imbalance with R and Caret – An Introduction. http://dpmartin42.github.io/posts/r/imbalanced-classes-part-1
+
+```{r ROC/AUC, eval=FALSE, include=TRUE}
+
+# Create a model list
+model_list <- list(gbm = model)
+
+# Build functon to create predictions
+test_roc <- function(model, data) {
+  
+  roc(data$class,
+      predict(model, newdata = data, type = "prob")[, "yes"])
+
+}
+  
+# Examine results for test set
+model_list_roc <- model_list %>%
+  map(test_roc, data = test)
+
+model_list_roc %>%
+  map(auc)
+
+results_list_roc <- list(NA)
+num_mod <- 1
+
+for(the_roc in model_list_roc){
+  
+  results_list_roc[[num_mod]] <- 
+    data_frame(tpr = the_roc$sensitivities,
+               fpr = 1 - the_roc$specificities,
+               model = names(model_list)[num_mod])
+  
+  num_mod <- num_mod + 1
+  
+}
+
+results_df_roc <- bind_rows(results_list_roc)
+
+# Plot ROC curve for all 5 models
+
+ggplot(aes(x = fpr,  y = tpr, group = model), data = results_df_roc) +
+  geom_line(aes(color = model), size = 0.5) +
+  theme_hc() +
+  scale_colour_manual(values = c("#4E78A7")) +
+  theme(text = element_text("sans", size = 11),
+        axis.title.x = element_text(size = 11),
+        axis.text.x = element_text(size = 11),
+        axis.title.y = element_text(size = 11),
+        axis.text.y = element_text(size = 11),
+        axis.line = element_line(size = 0.5, colour = "black"),
+        legend.position = "none",
+        legend.title = element_blank()) +
+  ylab("True Positive Rate") +
+  xlab("False Positive Rate") +
+  geom_abline(intercept = 0, slope = 1, color = "grey", size = 1)
+
+```
+
+## Explore Thresholds
+
+Use thresholder to explore the optimal threshold.
+
+```{r explore thresholds, eval=FALSE, include=TRUE}
+
+# Calcuate best thresholds
+thresholder(MODEL, threshold = seq(.01, 1, by = 0.01), final = TRUE) # Set search granularity
+
+thres <- as.data.frame(thres)
+
+```
+
+
+## Confusion matrix and MCC accuracy
+
+calcualte confusion matrix for different thresholds and calcualte the MCC measure of accuracy for each scenario. 
+
+```{r confusion matrix and MCC accuracy, eval=FALSE, include=TRUE}
+
+test$opt_thres <- ifelse(test$gbm < <value>, 0, 1) # add relevant threshold value
+
+# confusion matrix for testing accuracy of binomial model
+con_mat <- ftable(test$opt_thres, test$class)
+
+# =============== stats ============= #
+
+TN <- as.numeric(con_mat[1])
+FN <- as.numeric(con_mat[2])
+FP <- as.numeric(con_mat[3])
+TP <- as.numeric(con_mat[4])
+
+# Print the values from the confusion matrix
+print("TP")
+TP/(TP + FP) * 100
+print("FP")
+FP/(FP + TP) * 100
+print("FN")
+FN/(TN + FN) * 100
+print("TN")
+TN/(TN + FN) * 100
+
+# print the MCC
+((TP * TN) - (FP * FN)) / sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+
+
+```
+

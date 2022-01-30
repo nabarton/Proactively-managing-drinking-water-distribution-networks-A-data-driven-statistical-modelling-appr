@@ -1,0 +1,115 @@
+---
+
+Author: Neal Barton
+version: 1
+Date: 14/04/2020
+Output: word_document
+Title: An Evaluation of Pipe Failure in Drinking Water Networks
+output:
+  word_document: default
+
+---
+
+## Install relevant packages
+
+```{r Import Packages, eval=FALSE, include=TRUE}
+
+# Install relevant packages
+
+library(extrafont)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+library(stringr)
+
+```
+
+## Poisson mean function with 95% confidence interval 
+
+Poisson mean distribution with 95 % confidence interval: Written by Adam Howes 2017
+
+````{r Poisson mean, eval=FALSE, include=TRUE}
+
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+
+# 95% Confidence Interval Function 
+  poisson_mean <- function(num, length) {
+    
+    log_estimate <- rep(0, length(num))
+    log_low_limit <- log_estimate
+    log_high_limit <- log_estimate
+    for (i in 1:length(num)) {
+      glm1 <- glm(num[i] ~ 1 + offset(log(length[i])), family = poisson)
+      log_estimate[i] <- summary(glm1)$coefficients[,1]
+      log_se <- summary(glm1)$coefficients[,2]
+      log_low_limit[i] <- log_estimate[i] - (1.96*log_se)
+      log_high_limit[i] <- log_estimate[i] + (1.96*log_se)
+    }
+    estimate <- exp(log_estimate)
+    low_limit <- exp(log_low_limit)
+    high_limit <- exp(log_high_limit)
+    send_back <- array(c(estimate, low_limit, high_limit), dim = c(length(num), 3))
+    colnames(send_back) <- c("estimate", "low_limit", "high_limit")
+    return(as.data.frame(send_back))
+  }
+
+
+```
+
+## Calculate seasonal failure rates for each material
+
+Calculate seasonal failure rates for each material in the Standard Ofwat format of bursts/1000km/year.
+
+```{r seasonal failure rate, eval=FALSE, include=TRUE}
+
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+
+  # get unique pipe length (because pipe length is repeated by year which distorts final results)
+  df_unique_no <- (length(unique(mat$Week_end)))
+  df_unique_no <- as.numeric(df_unique_no)
+  
+  # group data by month
+  df <- df[ , list(length = sum(length), bursts = sum(nBurstsReactive)), by = c(var)]
+  
+  # caculate length of pipe
+  df$length <- (((df$length / 1000000) / df_unique_no))
+  
+  # Use the poisson mean function to caculate EV and 95% CI for Bursts per week per 1000km / years
+  df <- bind_cols(df, poisson_mean(df$bursts, df$length)/year) # change year as appropriate
+  
+  # Reorder factor levels for ggplot
+  df$Month <- factor(df$var, levels = df$var[order = c(12,1,2,3,4,5,6,7,8,9,10,11)])
+  
+  saveRDS(df, "FILE_LOCATION, ",(mat),"_",(var),".rds")
+
+```
+
+## Create plots using ggplot function
+
+Example plot below for seasonal variation plot. All plots were tailored to each variable: season, pipe age and diameter. 
+
+```{r plots, eval=FALSE, include=TRUE}
+
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+
+ggplot(df, aes(x = Month, y = estimate, group = Material)) +
+  geom_line(aes(color = Material, linetype = Material), size = 1) +
+  geom_point(aes(shape = Material, color = Material), size = 2) +
+  theme_classic() +
+  theme(legend.text = element_text(family = "Times New Roman", size = 12),
+        axis.title = element_text(family = "Times New Roman", size = 12),
+        axis.text = element_text(family = "Times New Roman", size = 12),
+        legend.title = element_text(family = "Times New Roman", size = 12)) +
+  guides(fill = guide_legend(title = "Material")) +
+  scale_x_discrete(name = "Month", labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May", 
+                                              "6" = "Jun", "7" = "Jul", "8" = "Aug", "9" = "Sep", 
+                                              "10" = "Oct", "11" = "Nov", "12" = "Dec")) +
+  labs(y = "Bursts/1000 km/Year")
+  # geom_smooth((aes(group = 1)), se = FALSE, linetype = "dashed", color = "red", size = 0.5)
+  
+  ggsave("Output/Seasonal_Failure_Rate/All.png", dpi = 1000, width = 210, height = 148, units = 'mm')
+
+```
+
